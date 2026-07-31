@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import { geocodeLocation } from './aiEngine';
 import { TelemetryData, RouteDetails } from '../types';
+import { getStoredHazards } from './hazardStorage';
 
 const OSRM_DRIVING_URL = 'https://router.project-osrm.org/route/v1/driving';
 
@@ -28,11 +29,27 @@ export class RoutesMapService {
 
     L.control.zoom({ position: 'topright' }).addTo(this.map);
 
+    // Plot all persisted community hazards from JSON/localStorage on initial load
+    this.renderAllStoredHazardPins();
+
     setTimeout(() => {
       this.map?.invalidateSize();
     }, 250);
 
     return this.map;
+  }
+
+  public renderAllStoredHazardPins() {
+    if (!this.map) return;
+
+    // Remove existing hazard markers to prevent duplicates
+    this.hazardMarkers.forEach(m => this.map?.removeLayer(m));
+    this.hazardMarkers = [];
+
+    const storedHazards = getStoredHazards();
+    storedHazards.forEach(h => {
+      this.plotSingleHazardPin(h.type, h.symbol || '⚠️', h.notes, h.lat, h.lng);
+    });
   }
 
   public invalidateSize() {
@@ -41,7 +58,7 @@ export class RoutesMapService {
     }
   }
 
-  public addHazardMarkerToMap(type: string, symbol: string, notes: string, lat?: number, lng?: number) {
+  public plotSingleHazardPin(type: string, symbol: string, notes: string, lat?: number, lng?: number) {
     if (!this.map) return;
 
     const center = this.map.getCenter();
@@ -66,13 +83,19 @@ export class RoutesMapService {
       <div style="font-family:sans-serif; font-size:12px; line-height:1.5; color:#f8fafc;">
         <strong style="color:#f59e0b; font-size:13px;">${symbol} ${type}</strong><br>
         <span style="color:#cbd5e1; font-size:11.5px;">${notes || 'Community Reported Hazard'}</span><br>
-        <span style="font-size:10px; color:#10b981; font-weight:bold;">✓ Verified Community Telemetry</span>
+        <span style="font-size:10px; color:#10b981; font-weight:bold;">✓ Saved in JSON Persistent Grid</span>
       </div>
     `);
 
     this.hazardMarkers.push(marker);
-    marker.openPopup();
-    this.map.panTo([targetLat, targetLng]);
+    return { lat: targetLat, lng: targetLng };
+  }
+
+  public addHazardMarkerToMap(type: string, symbol: string, notes: string, lat?: number, lng?: number) {
+    const coords = this.plotSingleHazardPin(type, symbol, notes, lat, lng);
+    if (this.map && coords) {
+      this.map.panTo([coords.lat, coords.lng]);
+    }
   }
 
   public async calculateAndDrawRoute(originQuery: string, destQuery: string): Promise<TelemetryData> {

@@ -1,0 +1,29 @@
+[
+  {
+    "id": "h-1",
+    "type": "Street Lighting Audit",
+    "symbol": "💡",
+    "notes": "[Commercial Avenue] Commercial avenue 96% lit by high-mast LED lights.",
+    "lat": 23.262,
+    "lng": 77.415,
+    "timestamp": "10:14 PM"
+  },
+  {
+    "id": "h-2",
+    "type": "Poor / Broken Lighting",
+    "symbol": "🌑",
+    "notes": "[North Gate Alleyway] Streetlamp flickering near North Gate alleyway.",
+    "lat": 23.251,
+    "lng": 77.408,
+    "timestamp": "09:42 PM"
+  },
+  {
+    "id": "h-3",
+    "type": "Suspicious Activity",
+    "symbol": "⚠️",
+    "notes": "[Bus Stop] Unattended parked vehicle near bus stop.",
+    "lat": 23.268,
+    "lng": 77.421,
+    "timestamp": "08:15 PM"
+  }
+]

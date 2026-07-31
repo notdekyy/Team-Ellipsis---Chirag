@@ -1,13 +1,21 @@
-import React, { useState } from 'react';
-import { BarChart3, Send, CheckCircle2, AlertOctagon, Lightbulb, ShieldAlert, ThumbsUp, Layers, Eye, MapPin, Moon, AlertTriangle, UserCheck, Siren } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BarChart3, Send, CheckCircle2, AlertOctagon, Lightbulb, ShieldAlert, ThumbsUp, Layers, Eye, MapPin, Moon, AlertTriangle, UserCheck, Siren, FileJson } from 'lucide-react';
 import { routesMapService } from '../services/routesMap';
-import { HazardReport } from '../types';
+import { getStoredHazards, saveHazardToStorage, exportHazardsToJSONFile, StoredHazard } from '../services/hazardStorage';
 
 export const Module2_Analytics: React.FC = () => {
   const [hazardType, setHazardType] = useState('Street Lighting Audit');
   const [locationName, setLocationName] = useState('');
   const [notes, setNotes] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'lights' | 'hazards' | 'police'>('all');
+  const [reports, setReports] = useState<StoredHazard[]>([]);
+  const [submitted, setSubmitted] = useState<StoredHazard | null>(null);
+
+  useEffect(() => {
+    // Load persisted community hazards from JSON/localStorage
+    const saved = getStoredHazards();
+    setReports(saved);
+  }, []);
 
   const getSymbolForCategory = (type: string) => {
     switch (type) {
@@ -31,29 +39,6 @@ export const Module2_Analytics: React.FC = () => {
     }
   };
 
-  const [reports, setReports] = useState<HazardReport[]>([
-    {
-      id: 'h-1',
-      type: 'Street Lighting Audit',
-      notes: 'Commercial avenue 96% lit by high-mast LED lights.',
-      timestamp: '10:14 PM',
-    },
-    {
-      id: 'h-2',
-      type: 'Poor / Broken Lighting',
-      notes: 'Streetlamp flickering near North Gate alleyway.',
-      timestamp: '09:42 PM',
-    },
-    {
-      id: 'h-3',
-      type: 'Suspicious Activity',
-      notes: 'Unattended parked vehicle near bus stop.',
-      timestamp: '08:15 PM',
-    },
-  ]);
-
-  const [submitted, setSubmitted] = useState<HazardReport | null>(null);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!notes.trim() && !locationName.trim()) return;
@@ -61,20 +46,35 @@ export const Module2_Analytics: React.FC = () => {
     const symbol = getSymbolForCategory(hazardType);
     const detailText = locationName ? `[${locationName}] ${notes}` : notes;
 
-    const newReport: HazardReport = {
+    // Generate coordinates near center map or default
+    const lat = 23.2599 + (Math.random() - 0.5) * 0.02;
+    const lng = 77.4126 + (Math.random() - 0.5) * 0.02;
+
+    const newReport: StoredHazard = {
       id: 'h-' + Date.now(),
       type: hazardType,
+      symbol,
       notes: detailText,
+      lat,
+      lng,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setReports(prev => [newReport, ...prev]);
+    // Save to persistent JSON storage & trigger download backup
+    const updatedHazards = saveHazardToStorage(newReport);
+    setReports(updatedHazards);
     setSubmitted(newReport);
 
-    routesMapService.addHazardMarkerToMap(hazardType, symbol, detailText);
+    // Plot marker on Leaflet map
+    routesMapService.addHazardMarkerToMap(hazardType, symbol, detailText, lat, lng);
 
     setNotes('');
     setLocationName('');
+  };
+
+  const handleManualExportJSON = () => {
+    exportHazardsToJSONFile(reports);
+    alert('📥 Generated & downloaded updated community_hazards.json file!');
   };
 
   return (
@@ -90,13 +90,18 @@ export const Module2_Analytics: React.FC = () => {
               Module 2: Safety Analytics Engine
             </h2>
             <p className="text-xs sm:text-sm font-medium text-gray-400 whitespace-nowrap truncate">
-              Neighborhood Safety Index & Community Reporting
+              Neighborhood Safety Index & JSON Persistent Hazard Grid
             </p>
           </div>
         </div>
-        <span className="text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30 shrink-0">
-          Analytics Active
-        </span>
+
+        <button
+          onClick={handleManualExportJSON}
+          className="px-4 py-2.5 rounded-xl bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30 hover:bg-[#F59E0B] hover:text-slate-950 text-xs font-extrabold flex items-center gap-2 transition-all duration-200 shrink-0"
+        >
+          <FileJson className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline whitespace-nowrap">Export hazards.json</span>
+        </button>
       </div>
 
       {/* Safety Index Gauge Card */}
@@ -147,7 +152,7 @@ export const Module2_Analytics: React.FC = () => {
               activeFilter === 'all' ? 'bg-[#3B82F6] border-blue-500 text-white shadow-sm' : 'bg-[#121212] border-[#2A2A2A] text-gray-300'
             }`}
           >
-            All Pins
+            All Pins ({reports.length})
           </button>
 
           <button
@@ -186,7 +191,7 @@ export const Module2_Analytics: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-5 pt-2">
         <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2.5">
           <AlertOctagon className="w-5 h-5 text-[#F59E0B] shrink-0" />
-          <span>Report Community Safety Telemetry</span>
+          <span>Report Community Safety Telemetry (Saved in JSON)</span>
         </h3>
 
         <div className="space-y-2">
@@ -240,7 +245,7 @@ export const Module2_Analytics: React.FC = () => {
           className="w-full min-h-[52px] px-6 py-4 bg-[#F59E0B] hover:bg-amber-500 text-slate-950 font-extrabold rounded-xl text-xs sm:text-sm md:text-base flex items-center justify-center gap-3 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
         >
           <Send className="w-5 h-5 shrink-0" />
-          <span className="whitespace-nowrap">Broadcast Telemetry & Plot Hazard Pin on Map</span>
+          <span className="whitespace-nowrap">Broadcast Telemetry & Save to JSON Grid</span>
         </button>
       </form>
 
@@ -248,19 +253,25 @@ export const Module2_Analytics: React.FC = () => {
         <div className="p-5 bg-[#22C55E]/10 border border-[#22C55E]/30 rounded-2xl text-xs sm:text-sm text-[#22C55E] space-y-1.5">
           <div className="flex items-center gap-2.5 font-extrabold">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
-            <span>Hazard Telemetry Broadcasted & Map Pin Plotted!</span>
+            <span>Hazard Saved Persistently to JSON & Map Pin Plotted!</span>
           </div>
           <p className="text-xs text-gray-400 font-medium">
-            Category: {submitted.type} • Timestamp: {submitted.timestamp}
+            Category: {submitted.type} • Saved in community_hazards.json • Timestamp: {submitted.timestamp}
           </p>
         </div>
       )}
 
       {/* Live Community Reports Stream */}
       <div className="pt-3 border-t border-[#2A2A2A] space-y-4">
-        <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-gray-300">
-          Live Community Telemetry Feed Stream
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-gray-300">
+            Live Community Telemetry Feed Stream ({reports.length} Reports)
+          </h3>
+          <span className="text-xs text-[#22C55E] font-extrabold flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse"></span>
+            JSON Saved & Persisted
+          </span>
+        </div>
 
         <div className="space-y-3.5 max-h-56 overflow-y-auto no-scrollbar">
           {reports.map(r => (
@@ -273,11 +284,14 @@ export const Module2_Analytics: React.FC = () => {
                 <span className="text-xs font-mono text-gray-500 shrink-0">{r.timestamp}</span>
               </div>
               <p className="text-gray-200 font-medium text-xs sm:text-sm leading-relaxed">{r.notes}</p>
-              <div className="flex items-center gap-3.5 pt-1 text-xs text-gray-400 font-medium">
-                <button className="flex items-center gap-2 hover:text-[#3B82F6] transition-colors">
-                  <ThumbsUp className="w-4 h-4 shrink-0" /> Verify Report (12)
-                </button>
-                <span>• Verified by AURA Patrol</span>
+              <div className="flex items-center justify-between pt-1 text-xs text-gray-400 font-medium">
+                <div className="flex items-center gap-3">
+                  <button className="flex items-center gap-2 hover:text-[#3B82F6] transition-colors">
+                    <ThumbsUp className="w-4 h-4 shrink-0" /> Verify Report (12)
+                  </button>
+                  <span>• Verified by AURA Patrol</span>
+                </div>
+                <span className="text-[11px] text-gray-500 font-mono">ID: {r.id}</span>
               </div>
             </div>
           ))}
